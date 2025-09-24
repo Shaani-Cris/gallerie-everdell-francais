@@ -7,61 +7,121 @@
 <style>
   :root { --gap: 12px; }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#111; color:#eee; }
+
   header { padding:14px 16px; text-align:center; font-weight:600; }
-  .grid { display:grid; gap:var(--gap); grid-template-columns: 1fr; padding: var(--gap); max-width: 1200px; margin: 0 auto; }
-  .card { background:#1a1a1a; border-radius:16px; overflow:hidden; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
-  .thumb { aspect-ratio: 4/3; width:100%; background:#222 center/cover no-repeat; user-select:none; -webkit-user-drag: none; }
-  .cap { padding:10px 12px; font-size:14px; opacity:.85; background: rgba(255,255,255,.04); }
-  .lightbox { position: fixed; inset:0; display:none; place-items:center; background: rgba(0,0,0,.9); z-index: 9999; }
-  .lightbox.open { display:grid; }
-  .stage { width: min(92vw, 1400px); height: min(92vh, 90vw); background: center/contain no-repeat; user-select:none; -webkit-user-drag: none; position:relative; }
-  .ui { position: absolute; inset:auto 0 0 0; display:flex; gap:8px; justify-content: center; padding: 12px; }
-  .btn { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); padding:10px 14px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(6px); }
-  .btn:active { transform: translateY(1px); }
-  @media (min-width: 600px){ .grid { grid-template-columns: repeat(2, 1fr); } }
-  @media (min-width: 1024px){
-    body { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
-    header { padding: 10px 16px; }
-    .grid { max-width: none; margin: 0; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); height: calc(100vh - 56px); }
-    .card { display: grid; grid-template-rows: 1fr auto; height: 100%; }
-    .thumb { aspect-ratio: auto; width: 100%; height: 100%; background-size: cover; background-position: center; }
-    .cap { font-size: 15px; }
+
+  /* Grille responsive */
+  .grid {
+    display:grid; gap:var(--gap);
+    grid-template-columns: 1fr;               /* mobile par défaut */
+    padding: var(--gap);
+    max-width: 1200px; margin: 0 auto;
   }
+  @media (min-width: 600px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) {
+    body { display: grid; grid-template-rows: auto 1fr; }
+    header { padding: 10px 16px; }
+    .grid {
+      max-width: none; margin: 0;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      height: calc(100vh - 56px);             /* plein écran sous le header */
+    }
+  }
+
+  /* Cartes + miniatures entières (contain) */
+  .card {
+    background:#1a1a1a; border-radius:16px; overflow:hidden;
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    display: grid; grid-template-rows: 1fr auto;
+  }
+  .thumb {
+    width:100%;
+    aspect-ratio: 3 / 4;                      /* ratio portrait confortable */
+    background: #222 center/contain no-repeat;/* montre l’image entière */
+    user-select:none; -webkit-user-drag: none;
+  }
+  @media (min-width: 1024px){
+    .thumb { aspect-ratio: auto; height: 100%; }
+  }
+  .cap { padding:10px 12px; font-size:14px; opacity:.85; background: rgba(255,255,255,.04); }
+
+  /* Dissuasion téléchargement (inevitable contournable) */
+  html { -webkit-touch-callout: none; }
+  img { pointer-events:none; -webkit-user-drag: none; }
+
+  /* Visionneuse */
+  .lightbox {
+    position: fixed; inset:0; display:none; place-items:center;
+    background: rgba(0,0,0,.9); z-index: 9999;
+  }
+  .lightbox.open { display:grid; }
+  .stage {
+    width: min(92vw, 1400px); height: min(92vh, 90vw);
+    background: #000;
+    position: relative; overflow: hidden;
+    touch-action: none;                        /* pour pointer events/pinch */
+    border-radius: 12px;
+  }
+  .stage img {
+    position: absolute; left: 50%; top: 50%;
+    max-width: none; max-height: none;         /* on gère nous-mêmes */
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    cursor: grab; user-select: none; will-change: transform;
+  }
+  .stage img.grabbing { cursor: grabbing; }
+
+  .ui {
+    position: absolute; inset:auto 0 0 0; display:flex; gap:8px;
+    justify-content: center; padding: 12px;
+  }
+  .btn {
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+    padding:10px 14px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(6px);
+    color:#eee;
+  }
+  .btn:active { transform: translateY(1px); }
 </style>
 </head>
 <body>
   <header>Galerie — Consultation uniquement (téléchargement désactivé)</header>
 
   <main class="grid" id="grid">
+    <!-- Mets tes fichiers img1.jpg ... img4.jpg dans le même dossier -->
     <figure class="card">
-      <a href="img1.jpg?v=2" data-cap="Photo 1">
-        <div class="thumb" style="background-image:url('img1.jpg?v=2')"></div>
+      <a href="img1.jpg" data-cap="Photo 1">
+        <div class="thumb" style="background-image:url('img1.jpg')"></div>
       </a>
       <figcaption class="cap">Photo 1</figcaption>
     </figure>
     <figure class="card">
-      <a href="img2.jpg?v=2" data-cap="Photo 2">
-        <div class="thumb" style="background-image:url('img2.jpg?v=2')"></div>
+      <a href="img2.jpg" data-cap="Photo 2">
+        <div class="thumb" style="background-image:url('img2.jpg')"></div>
       </a>
       <figcaption class="cap">Photo 2</figcaption>
     </figure>
     <figure class="card">
-      <a href="img3.jpg?v=2" data-cap="Photo 3">
-        <div class="thumb" style="background-image:url('img3.jpg?v=2')"></div>
+      <a href="img3.jpg" data-cap="Photo 3">
+        <div class="thumb" style="background-image:url('img3.jpg')"></div>
       </a>
       <figcaption class="cap">Photo 3</figcaption>
     </figure>
     <figure class="card">
-      <a href="img4.jpg?v=2" data-cap="Photo 4">
-        <div class="thumb" style="background-image:url('img4.jpg?v=2')"></div>
+      <a href="img4.jpg" data-cap="Photo 4">
+        <div class="thumb" style="background-image:url('img4.jpg')"></div>
       </a>
       <figcaption class="cap">Photo 4</figcaption>
     </figure>
   </main>
 
+  <!-- Visionneuse zoom/pan -->
   <div class="lightbox" id="box" aria-hidden="true">
-    <div class="stage" id="stage" role="dialog" aria-label="Visionneuse"></div>
+    <div class="stage" id="stage" role="dialog" aria-label="Visionneuse">
+      <img id="lightImg" alt="Photo zoomable">
+    </div>
     <div class="ui">
       <button class="btn" id="prev" aria-label="Précédent">◀</button>
       <button class="btn" id="close" aria-label="Fermer">✕ Fermer</button>
@@ -74,32 +134,170 @@
   const links = Array.from(document.querySelectorAll('#grid a'));
   const box = document.getElementById('box');
   const stage = document.getElementById('stage');
+  const img = document.getElementById('lightImg');
   const closeBtn = document.getElementById('close');
   const nextBtn = document.getElementById('next');
   const prevBtn = document.getElementById('prev');
+
   let idx = 0;
 
-  document.addEventListener('contextmenu', e => e.preventDefault());
-  document.addEventListener('dragstart', e => e.preventDefault());
+  // État zoom/pan
+  let scale = 1, minScale = 1, maxScale = 8;
+  let tx = 0, ty = 0;              // translation (px)
+  let startX = 0, startY = 0;      // pour pan souris/doigt
+  let isPanning = false;
+
+  // Pointeurs tactiles (pinch)
+  const pointers = new Map();
+  let startDist = 0, startScale = 1, startMid = {x:0,y:0};
+  let imgNatural = {w:0, h:0};
+
+  function loadImageDimensions() {
+    return new Promise(res => {
+      const tmp = new Image();
+      tmp.onload = () => { imgNatural = { w: tmp.naturalWidth, h: tmp.naturalHeight }; res(); };
+      tmp.src = img.src;
+    });
+  }
 
   function openAt(i){
     idx = (i + links.length) % links.length;
-    stage.style.backgroundImage = `url('${links[idx].getAttribute('href')}')`;
-    box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
+    img.src = links[idx].getAttribute('href');
+    img.classList.remove('grabbing');
+    // Reset après chargement (pour connaître la taille naturelle)
+    img.onload = async () => {
+      await loadImageDimensions();
+      resetView();
+      box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
+    };
   }
   function close(){ box.classList.remove('open'); box.setAttribute('aria-hidden', 'true'); }
 
-  links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
+  function resetView(){
+    scale = 1; tx = 0; ty = 0;
+    applyTransform();
+    centerToFit();
+  }
+
+  function applyTransform(){
+    img.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${scale})`;
+  }
+
+  function centerToFit(){
+    // Centrer l’image pour qu’elle tienne dans la stage (minScale = fit)
+    const rect = stage.getBoundingClientRect();
+    const sw = rect.width, sh = rect.height;
+    const fit = Math.min(sw / imgNatural.w, sh / imgNatural.h);
+    minScale = Math.min(1 * fit, fit) || 1; // si très grande, fit<1 ; sinon 1
+    if (!isFinite(minScale) || minScale <= 0) minScale = 1;
+    if (scale < minScale) { scale = minScale; tx = 0; ty = 0; applyTransform(); }
+  }
+
+  // Souris : pan + molette zoom
+  img.addEventListener('mousedown', e => {
+    isPanning = true; img.classList.add('grabbing');
+    startX = e.clientX - tx; startY = e.clientY - ty;
+  });
+  document.addEventListener('mousemove', e => {
+    if(!isPanning) return;
+    tx = e.clientX - startX; ty = e.clientY - startY;
+    applyTransform();
+  });
+  document.addEventListener('mouseup', () => { isPanning = false; img.classList.remove('grabbing'); });
+
+  stage.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = stage.getBoundingClientRect();
+    const cx = e.clientX - rect.left - rect.width/2 - tx;
+    const cy = e.clientY - rect.top  - rect.height/2 - ty;
+
+    const factor = e.deltaY < 0 ? 1.2 : 0.8;
+    const newScale = clamp(scale * factor, minScale, maxScale);
+    const k = newScale / scale;
+
+    // Zoom vers le pointeur : ajuster translation
+    tx = tx - cx*(k - 1);
+    ty = ty - cy*(k - 1);
+    scale = newScale;
+    applyTransform();
+  }, { passive:false });
+
+  // Double-clic / double-tap : reset
+  let lastTap = 0;
+  stage.addEventListener('click', e => {
+    const now = Date.now();
+    if (now - lastTap < 300) { resetView(); }
+    lastTap = now;
+  });
+
+  // Pointer events : pan à 1 doigt, pinch à 2 doigts
+  stage.addEventListener('pointerdown', e => {
+    stage.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pointers.size === 1) { // début pan
+      isPanning = true; startX = e.clientX - tx; startY = e.clientY - ty;
+    } else if (pointers.size === 2) { // début pinch
+      const [p1, p2] = [...pointers.values()];
+      startDist = dist(p1, p2);
+      startScale = scale;
+      startMid = mid(p1, p2);
+    }
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pointers.size === 1 && isPanning) {
+      tx = e.clientX - startX; ty = e.clientY - startY;
+      applyTransform();
+    } else if (pointers.size === 2) {
+      const [p1, p2] = [...pointers.values()];
+      const rect = stage.getBoundingClientRect();
+      const prevMid = startMid;
+      const newMid = mid(p1, p2);
+
+      // Zoom factor
+      const ratio = dist(p1, p2) / (startDist || 1);
+      const newScale = clamp(startScale * ratio, minScale, maxScale);
+
+      // Zoom autour du milieu des 2 doigts
+      const cx = prevMid.x - rect.left - rect.width/2 - tx;
+      const cy = prevMid.y - rect.top  - rect.height/2 - ty;
+      const k = newScale / scale || 1;
+      tx = tx - cx*(k - 1);
+      ty = ty - cy*(k - 1);
+      scale = newScale;
+
+      // translater avec déplacement du centre
+      tx += (newMid.x - prevMid.x);
+      ty += (newMid.y - prevMid.y);
+
+      startMid = newMid;
+      applyTransform();
+    }
+  });
+  stage.addEventListener('pointerup', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
+  stage.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
+
+  function clamp(v, a, b){ return Math.min(Math.max(v, a), b); }
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+  function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+
+  // Ouverture/fermeture + nav
+  function closeIfBackdrop(e){ if(e.target === stage || e.target === box) close(); }
+  box.addEventListener('click', closeIfBackdrop);
   closeBtn.addEventListener('click', close);
   nextBtn.addEventListener('click', () => openAt(idx+1));
   prevBtn.addEventListener('click', () => openAt(idx-1));
-  box.addEventListener('click', e => { if(e.target === box) close(); });
-  document.addEventListener('keydown', e => {
-    if(!box.classList.contains('open')) return;
-    if(e.key === 'Escape') close();
-    if(e.key === 'ArrowRight') openAt(idx+1);
-    if(e.key === 'ArrowLeft') openAt(idx-1);
-  });
+
+  links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
+
+  // Dissuasion : clic droit / drag
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('dragstart', e => e.preventDefault());
+
+  // Recalcule minScale si on redimensionne la fenêtre
+  window.addEventListener('resize', () => { centerToFit(); });
+
 })();
 </script>
 </body>
