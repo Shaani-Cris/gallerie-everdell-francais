@@ -26,9 +26,9 @@
     header { padding: 10px 16px; }
     .grid {
       max-width: none; margin: 0;
-      grid-template-columns: repeat(2, 1fr);
-      grid-template-rows: repeat(2, 1fr);
-      height: calc(100vh - 56px);             /* plein écran sous le header */
+      grid-template-columns: repeat(3, 1fr);  /* 3 colonnes en desktop */
+      grid-auto-rows: 1fr;
+      height: auto;                          /* on laisse scroller si + de 6 */
     }
   }
 
@@ -44,14 +44,7 @@
     background: #222 center/contain no-repeat; /* montre l’image entière */
     user-select:none; -webkit-user-drag: none;
   }
-  @media (min-width: 1024px){
-    .thumb { aspect-ratio: auto; height: 100%; }
-  }
   .cap { padding:10px 12px; font-size:14px; opacity:.85; background: rgba(255,255,255,.04); }
-
-  /* Dissuasion téléchargement */
-  html { -webkit-touch-callout: none; }
-  img { -webkit-user-drag: none; }
 
   /* Visionneuse */
   .lightbox {
@@ -68,7 +61,7 @@
   }
   .stage img {
     position: absolute; left: 50%; top: 50%;
-    max-width: none; max-height: none;         /* géré via transform */
+    max-width: none; max-height: none;
     transform: translate(-50%, -50%) scale(1);
     transform-origin: center center;
     cursor: grab; user-select: none; will-change: transform;
@@ -91,7 +84,7 @@
   <header>Galerie — Consultation uniquement (téléchargement désactivé)</header>
 
   <main class="grid" id="grid">
-    <!-- Mets tes fichiers img1.jpg ... img4.jpg dans le même dossier -->
+    <!-- 9 images -->
     <figure class="card">
       <a href="img1.jpg" data-cap="Photo 1">
         <div class="thumb" style="background-image:url('img1.jpg')"></div>
@@ -115,6 +108,36 @@
         <div class="thumb" style="background-image:url('img4.jpg')"></div>
       </a>
       <figcaption class="cap">Photo 4</figcaption>
+    </figure>
+    <figure class="card">
+      <a href="img5.jpg" data-cap="Photo 5">
+        <div class="thumb" style="background-image:url('img5.jpg')"></div>
+      </a>
+      <figcaption class="cap">Photo 5</figcaption>
+    </figure>
+    <figure class="card">
+      <a href="img6.jpg" data-cap="Photo 6">
+        <div class="thumb" style="background-image:url('img6.jpg')"></div>
+      </a>
+      <figcaption class="cap">Photo 6</figcaption>
+    </figure>
+    <figure class="card">
+      <a href="img7.jpg" data-cap="Photo 7">
+        <div class="thumb" style="background-image:url('img7.jpg')"></div>
+      </a>
+      <figcaption class="cap">Photo 7</figcaption>
+    </figure>
+    <figure class="card">
+      <a href="img8.jpg" data-cap="Photo 8">
+        <div class="thumb" style="background-image:url('img8.jpg')"></div>
+      </a>
+      <figcaption class="cap">Photo 8</figcaption>
+    </figure>
+    <figure class="card">
+      <a href="img9.jpg" data-cap="Photo 9">
+        <div class="thumb" style="background-image:url('img9.jpg')"></div>
+      </a>
+      <figcaption class="cap">Photo 9</figcaption>
     </figure>
   </main>
 
@@ -150,13 +173,12 @@
   let idx = 0;
 
   // État zoom/pan
-  let scale = 1, minScale = 1, maxScale = 8; // max recalculé à l'ouverture (cover)
+  let scale = 1, minScale = 1, maxScale = 8;
   let tx = 0, ty = 0;
   let startX = 0, startY = 0;
   let isPanning = false;
-  let moved = false; // pour ne pas fermer sur click après un drag
+  let moved = false;
 
-  // Pointeurs tactiles (pinch)
   const pointers = new Map();
   let startDist = 0, startScale = 1, startMid = {x:0,y:0};
   let imgNatural = {w:0, h:0};
@@ -175,18 +197,17 @@
     img.classList.remove('grabbing');
     img.onload = async () => {
       await loadImageDimensions();
-      document.body.classList.add('modal-open');  // bloque le scroll de fond
+      document.body.classList.add('modal-open');
       box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
 
-      // Calcule FIT (entier à l'écran) et COVER (remplit l'écran)
       const rect = stage.getBoundingClientRect();
       const sw = rect.width, sh = rect.height;
-      const fit   = Math.min(sw / imgNatural.w, sh / imgNatural.h);   // affichage demandé au départ
-      const cover = Math.max(sw / imgNatural.w, sh / imgNatural.h);   // “zoom max” demandé
+      const fit   = Math.min(sw / imgNatural.w, sh / imgNatural.h);
+      const cover = Math.max(sw / imgNatural.w, sh / imgNatural.h);
 
       minScale = fit > 0 ? fit : 1;
-      maxScale = Math.max(cover, minScale); // zoom max = ancien niveau "trop fort"
-      scale = minScale; tx = 0; ty = 0;     // démarrage à la taille écran (contain)
+      maxScale = Math.max(cover, minScale);
+      scale = minScale; tx = 0; ty = 0;
       applyTransform();
     };
   }
@@ -203,26 +224,21 @@
     const rect = stage.getBoundingClientRect();
     const newScale = clamp(scale * factor, minScale, maxScale);
     if (Math.abs(newScale - scale) < 1e-6) return;
-
-    // zoom centré autour du pointeur
     const cx = pointX - rect.left - rect.width/2 - tx;
     const cy = pointY - rect.top  - rect.height/2 - ty;
     const k = newScale / scale;
-
     tx = tx - cx*(k - 1);
     ty = ty - cy*(k - 1);
     scale = newScale;
     applyTransform();
   }
 
-  // Molette : capter et empêcher le scroll
   box.addEventListener('wheel', e => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.2 : 0.8;
     zoomAt(e.clientX, e.clientY, factor);
   }, { passive:false });
 
-  // Souris : pan
   img.addEventListener('mousedown', e => {
     isPanning = true; moved = false; img.classList.add('grabbing');
     startX = e.clientX - tx; startY = e.clientY - ty;
@@ -237,65 +253,6 @@
   });
   document.addEventListener('mouseup', () => { isPanning = false; img.classList.remove('grabbing'); });
 
-  // Double-clic : ajuster / zoom x2 depuis le point
-  stage.addEventListener('dblclick', e => {
-    e.preventDefault();
-    if (Math.abs(scale - minScale) < 1e-3) {
-      zoomAt(e.clientX, e.clientY, 2);
-    } else {
-      scale = minScale; tx = 0; ty = 0; applyTransform();
-    }
-  });
-
-  // Pointer events : pan 1 doigt, pinch 2 doigts
-  stage.addEventListener('pointerdown', e => {
-    stage.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if (pointers.size === 1) {
-      isPanning = true; moved = false; startX = e.clientX - tx; startY = e.clientY - ty;
-    } else if (pointers.size === 2) {
-      const [p1, p2] = [...pointers.values()];
-      startDist = dist(p1, p2);
-      startScale = scale;
-      startMid = mid(p1, p2);
-    }
-  });
-  stage.addEventListener('pointermove', e => {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if (pointers.size === 1 && isPanning) {
-      const ntx = e.clientX - startX;
-      const nty = e.clientY - startY;
-      if (Math.hypot(ntx - tx, nty - ty) > 2) moved = true;
-      tx = ntx; ty = nty; applyTransform();
-    } else if (pointers.size === 2) {
-      const [p1, p2] = [...pointers.values()];
-      const rect = stage.getBoundingClientRect();
-      const prevMid = startMid;
-      const newMid = mid(p1, p2);
-
-      const ratio = dist(p1, p2) / (startDist || 1);
-      const newScale = clamp(startScale * ratio, minScale, maxScale);
-
-      const cx = prevMid.x - rect.left - rect.width/2 - tx;
-      const cy = prevMid.y - rect.top  - rect.height/2 - ty;
-      const k = newScale / scale || 1;
-      tx = tx - cx*(k - 1);
-      ty = ty - cy*(k - 1);
-      scale = newScale;
-
-      tx += (newMid.x - prevMid.x);
-      ty += (newMid.y - prevMid.y);
-
-      startMid = newMid;
-      moved = true;
-      applyTransform();
-    }
-  });
-  stage.addEventListener('pointerup', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
-  stage.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
-
-  // Boutons
   zoomInBtn.addEventListener('click', () => {
     const r = stage.getBoundingClientRect();
     zoomAt(r.left + r.width/2, r.top + r.height/2, 1.25);
@@ -305,32 +262,26 @@
     zoomAt(r.left + r.width/2, r.top + r.height/2, 0.8);
   });
   zoomFitBtn.addEventListener('click', () => {
-    // retour à "ajusté à l'écran"
     const rect = stage.getBoundingClientRect();
     const fit = Math.min(rect.width / imgNatural.w, rect.height / imgNatural.h) || 1;
     scale = fit; tx = 0; ty = 0; applyTransform();
   });
 
-  // Nav + fermeture
   function openNext(){ openAt(idx+1); }
   function openPrev(){ openAt(idx-1); }
   nextBtn.addEventListener('click', openNext);
   prevBtn.addEventListener('click', openPrev);
 
-  // Fermer seulement si on clique VRAIMENT sur l’arrière-plan (pas la scène)
   box.addEventListener('click', (e) => {
     if (e.target === box && !moved) close();
   });
   closeBtn.addEventListener('click', close);
 
-  // Ouvrir
   links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
 
-  // Dissuasion : clic droit / drag
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('dragstart', e => e.preventDefault());
 
-  // Recalcule fit/cover si on redimensionne pendant l’ouverture
   window.addEventListener('resize', () => {
     if (!box.classList.contains('open')) return;
     const rect = stage.getBoundingClientRect();
@@ -339,12 +290,10 @@
     const cover = Math.max(sw / imgNatural.w, sh / imgNatural.h);
     minScale = fit > 0 ? fit : 1;
     maxScale = Math.max(cover, minScale);
-    // garde la position/zoom en cours mais clamped
     scale = clamp(scale, minScale, maxScale);
     applyTransform();
   });
 
-  // Utils
   function clamp(v, a, b){ return Math.min(Math.max(v, a), b); }
   function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
   function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
@@ -352,8 +301,6 @@
 </script>
 </body>
 </html>
-
-
 
 
 
