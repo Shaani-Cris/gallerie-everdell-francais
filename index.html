@@ -9,14 +9,14 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#111; color:#eee; }
-  body.modal-open { overflow: hidden; } /* bloque le scroll de fond */
+  body.modal-open { overflow: hidden; } /* bloque le scroll du fond */
 
   header { padding:14px 16px; text-align:center; font-weight:600; }
 
   /* Grille responsive */
   .grid {
     display:grid; gap:var(--gap);
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr;               /* mobile par défaut */
     padding: var(--gap);
     max-width: 1200px; margin: 0 auto;
   }
@@ -28,7 +28,7 @@
       max-width: none; margin: 0;
       grid-template-columns: repeat(2, 1fr);
       grid-template-rows: repeat(2, 1fr);
-      height: calc(100vh - 56px);
+      height: calc(100vh - 56px);             /* plein écran sous le header */
     }
   }
 
@@ -41,7 +41,7 @@
   .thumb {
     width:100%;
     aspect-ratio: 3 / 4;
-    background: #222 center/contain no-repeat;
+    background: #222 center/contain no-repeat; /* montre l’image entière */
     user-select:none; -webkit-user-drag: none;
   }
   @media (min-width: 1024px){
@@ -63,12 +63,12 @@
     width: min(92vw, 1400px); height: min(92vh, 90vw);
     background: #000;
     position: relative; overflow: hidden;
-    touch-action: none;
+    touch-action: none;                        /* pour pinch/pan */
     border-radius: 12px;
   }
   .stage img {
     position: absolute; left: 50%; top: 50%;
-    max-width: none; max-height: none;
+    max-width: none; max-height: none;         /* géré via transform */
     transform: translate(-50%, -50%) scale(1);
     transform-origin: center center;
     cursor: grab; user-select: none; will-change: transform;
@@ -85,7 +85,6 @@
     padding:10px 14px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(6px);
     color:#eee;
   }
-  .ui .spacer { flex: 1 1 0; }
 </style>
 </head>
 <body>
@@ -128,7 +127,6 @@
       <button class="btn" id="prev" aria-label="Précédent">◀</button>
       <button class="btn" id="zoomOut" aria-label="Zoom out">－</button>
       <button class="btn" id="zoomIn" aria-label="Zoom in">＋</button>
-      <button class="btn" id="zoom100" aria-label="100%">100%</button>
       <button class="btn" id="zoomFit" aria-label="Ajuster">Ajuster</button>
       <button class="btn" id="close" aria-label="Fermer">✕ Fermer</button>
       <button class="btn" id="next" aria-label="Suivant">▶</button>
@@ -147,16 +145,16 @@
   const prevBtn  = document.getElementById('prev');
   const zoomInBtn  = document.getElementById('zoomIn');
   const zoomOutBtn = document.getElementById('zoomOut');
-  const zoom100Btn = document.getElementById('zoom100');
   const zoomFitBtn = document.getElementById('zoomFit');
 
   let idx = 0;
 
   // État zoom/pan
-  let scale = 1, minScale = 1, maxScale = 8;
+  let scale = 1, minScale = 1, maxScale = 8; // max recalculé à l'ouverture (cover)
   let tx = 0, ty = 0;
   let startX = 0, startY = 0;
   let isPanning = false;
+  let moved = false; // pour ne pas fermer sur click après un drag
 
   // Pointeurs tactiles (pinch)
   const pointers = new Map();
@@ -179,7 +177,17 @@
       await loadImageDimensions();
       document.body.classList.add('modal-open');  // bloque le scroll de fond
       box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
-      resetView(); centerToFit(); applyTransform();
+
+      // Calcule FIT (entier à l'écran) et COVER (remplit l'écran)
+      const rect = stage.getBoundingClientRect();
+      const sw = rect.width, sh = rect.height;
+      const fit   = Math.min(sw / imgNatural.w, sh / imgNatural.h);   // affichage demandé au départ
+      const cover = Math.max(sw / imgNatural.w, sh / imgNatural.h);   // “zoom max” demandé
+
+      minScale = fit > 0 ? fit : 1;
+      maxScale = Math.max(cover, minScale); // zoom max = ancien niveau "trop fort"
+      scale = minScale; tx = 0; ty = 0;     // démarrage à la taille écran (contain)
+      applyTransform();
     };
   }
   function close(){
@@ -187,27 +195,18 @@
     document.body.classList.remove('modal-open');
   }
 
-  function resetView(){ scale = minScale; tx = 0; ty = 0; }
   function applyTransform(){
     img.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${scale})`;
   }
 
-  function centerToFit(){
-    const rect = stage.getBoundingClientRect();
-    const sw = rect.width, sh = rect.height;
-    const fit = Math.min(sw / imgNatural.w, sh / imgNatural.h);
-    minScale = fit > 0 ? fit : 1;
-    scale = Math.max(scale, minScale);
-    tx = 0; ty = 0;
-    applyTransform();
-  }
-
   function zoomAt(pointX, pointY, factor){
     const rect = stage.getBoundingClientRect();
+    const newScale = clamp(scale * factor, minScale, maxScale);
+    if (Math.abs(newScale - scale) < 1e-6) return;
+
+    // zoom centré autour du pointeur
     const cx = pointX - rect.left - rect.width/2 - tx;
     const cy = pointY - rect.top  - rect.height/2 - ty;
-
-    const newScale = clamp(scale * factor, minScale, maxScale);
     const k = newScale / scale;
 
     tx = tx - cx*(k - 1);
@@ -216,7 +215,7 @@
     applyTransform();
   }
 
-  // Molette : on capte sur toute la lightbox et on bloque le scroll
+  // Molette : capter et empêcher le scroll
   box.addEventListener('wheel', e => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.2 : 0.8;
@@ -225,17 +224,20 @@
 
   // Souris : pan
   img.addEventListener('mousedown', e => {
-    isPanning = true; img.classList.add('grabbing');
+    isPanning = true; moved = false; img.classList.add('grabbing');
     startX = e.clientX - tx; startY = e.clientY - ty;
   });
   document.addEventListener('mousemove', e => {
     if(!isPanning) return;
-    tx = e.clientX - startX; ty = e.clientY - startY;
+    const ntx = e.clientX - startX;
+    const nty = e.clientY - startY;
+    if (Math.hypot(ntx - tx, nty - ty) > 2) moved = true;
+    tx = ntx; ty = nty;
     applyTransform();
   });
   document.addEventListener('mouseup', () => { isPanning = false; img.classList.remove('grabbing'); });
 
-  // Double-clic : 100% si > fit, sinon zoom x2 au centre
+  // Double-clic : ajuster / zoom x2 depuis le point
   stage.addEventListener('dblclick', e => {
     e.preventDefault();
     if (Math.abs(scale - minScale) < 1e-3) {
@@ -249,8 +251,9 @@
   stage.addEventListener('pointerdown', e => {
     stage.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if (pointers.size === 1) { isPanning = true; startX = e.clientX - tx; startY = e.clientY - ty; }
-    else if (pointers.size === 2) {
+    if (pointers.size === 1) {
+      isPanning = true; moved = false; startX = e.clientX - tx; startY = e.clientY - ty;
+    } else if (pointers.size === 2) {
       const [p1, p2] = [...pointers.values()];
       startDist = dist(p1, p2);
       startScale = scale;
@@ -261,7 +264,10 @@
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if (pointers.size === 1 && isPanning) {
-      tx = e.clientX - startX; ty = e.clientY - startY; applyTransform();
+      const ntx = e.clientX - startX;
+      const nty = e.clientY - startY;
+      if (Math.hypot(ntx - tx, nty - ty) > 2) moved = true;
+      tx = ntx; ty = nty; applyTransform();
     } else if (pointers.size === 2) {
       const [p1, p2] = [...pointers.values()];
       const rect = stage.getBoundingClientRect();
@@ -282,6 +288,7 @@
       ty += (newMid.y - prevMid.y);
 
       startMid = newMid;
+      moved = true;
       applyTransform();
     }
   });
@@ -289,37 +296,53 @@
   stage.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
 
   // Boutons
-  zoomInBtn.addEventListener('click', () => zoomAt(stage.getBoundingClientRect().left + stage.clientWidth/2, stage.getBoundingClientRect().top + stage.clientHeight/2, 1.25));
-  zoomOutBtn.addEventListener('click', () => zoomAt(stage.getBoundingClientRect().left + stage.clientWidth/2, stage.getBoundingClientRect().top + stage.clientHeight/2, 0.8));
-  zoom100Btn.addEventListener('click', () => { scale = Math.max(1, minScale); tx = 0; ty = 0; applyTransform(); });
-  zoomFitBtn.addEventListener('click', () => { centerToFit(); });
-
-  // Raccourcis clavier : + / - / 0 / f / Échap / ← →
-  document.addEventListener('keydown', e => {
-    if (!box.classList.contains('open')) return;
-    if (e.key === '+') zoomInBtn.click();
-    if (e.key === '-') zoomOutBtn.click();
-    if (e.key === '0') zoom100Btn.click();
-    if (e.key.toLowerCase() === 'f') zoomFitBtn.click();
-    if (e.key === 'Escape') close();
-    if (e.key === 'ArrowRight') nextBtn.click();
-    if (e.key === 'ArrowLeft') prevBtn.click();
+  zoomInBtn.addEventListener('click', () => {
+    const r = stage.getBoundingClientRect();
+    zoomAt(r.left + r.width/2, r.top + r.height/2, 1.25);
+  });
+  zoomOutBtn.addEventListener('click', () => {
+    const r = stage.getBoundingClientRect();
+    zoomAt(r.left + r.width/2, r.top + r.height/2, 0.8);
+  });
+  zoomFitBtn.addEventListener('click', () => {
+    // retour à "ajusté à l'écran"
+    const rect = stage.getBoundingClientRect();
+    const fit = Math.min(rect.width / imgNatural.w, rect.height / imgNatural.h) || 1;
+    scale = fit; tx = 0; ty = 0; applyTransform();
   });
 
   // Nav + fermeture
-  function closeIfBackdrop(e){ if(e.target === stage || e.target === box) close(); }
-  box.addEventListener('click', closeIfBackdrop);
-  document.getElementById('close').addEventListener('click', close);
-  document.getElementById('next').addEventListener('click', () => openAt(idx+1));
-  document.getElementById('prev').addEventListener('click', () => openAt(idx-1));
+  function openNext(){ openAt(idx+1); }
+  function openPrev(){ openAt(idx-1); }
+  nextBtn.addEventListener('click', openNext);
+  prevBtn.addEventListener('click', openPrev);
 
+  // Fermer seulement si on clique VRAIMENT sur l’arrière-plan (pas la scène)
+  box.addEventListener('click', (e) => {
+    if (e.target === box && !moved) close();
+  });
+  closeBtn.addEventListener('click', close);
+
+  // Ouvrir
   links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
 
   // Dissuasion : clic droit / drag
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('dragstart', e => e.preventDefault());
 
-  window.addEventListener('resize', () => { if (box.classList.contains('open')) centerToFit(); });
+  // Recalcule fit/cover si on redimensionne pendant l’ouverture
+  window.addEventListener('resize', () => {
+    if (!box.classList.contains('open')) return;
+    const rect = stage.getBoundingClientRect();
+    const sw = rect.width, sh = rect.height;
+    const fit   = Math.min(sw / imgNatural.w, sh / imgNatural.h);
+    const cover = Math.max(sw / imgNatural.w, sh / imgNatural.h);
+    minScale = fit > 0 ? fit : 1;
+    maxScale = Math.max(cover, minScale);
+    // garde la position/zoom en cours mais clamped
+    scale = clamp(scale, minScale, maxScale);
+    applyTransform();
+  });
 
   // Utils
   function clamp(v, a, b){ return Math.min(Math.max(v, a), b); }
@@ -329,5 +352,8 @@
 </script>
 </body>
 </html>
+
+
+
 
 
