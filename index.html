@@ -5,27 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Galerie — Consultation uniquement</title>
 <style>
-  :root { --gap: 12px; --thumb: 220px; }
-  body { margin: 0; font-family: system-ui, sans-serif; background:#111; color:#eee; }
-  header { padding:16px; text-align:center; font-weight:600; }
+  :root { --gap: 12px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#111; color:#eee; }
+  header { padding:14px 16px; text-align:center; font-weight:600; }
   .grid {
     display:grid; gap:var(--gap);
-    grid-template-columns: repeat(auto-fill, minmax(var(--thumb), 1fr));
+    grid-template-columns: 1fr;               /* mobile par défaut */
     padding: var(--gap);
     max-width: 1200px; margin: 0 auto;
   }
+  /* vignettes “cartes” */
   .card {
-    background:#1a1a1a; border-radius:14px; overflow:hidden;
+    background:#1a1a1a; border-radius:16px; overflow:hidden;
     box-shadow: 0 6px 20px rgba(0,0,0,.35);
   }
   .thumb {
+    /* Mobile/tablette : ratio agréable */
     aspect-ratio: 4/3; width:100%;
     background:#222 center/cover no-repeat;
-    filter: contrast(1.02) saturate(1.02);
-    user-select:none;
+    user-select:none; -webkit-user-drag: none;
   }
-  .cap { padding:10px 12px; font-size:14px; opacity:.8 }
-  /* Lightbox */
+  .cap { padding:10px 12px; font-size:14px; opacity:.85; background: rgba(255,255,255,.04); }
+
+  /* Empêche clic droit / glisser (dissuasion) */
+  html { -webkit-touch-callout: none; }
+  body img { pointer-events:none; -webkit-user-drag: none; }
+  /* Visionneuse */
   .lightbox {
     position: fixed; inset:0; display:none; place-items:center;
     background: rgba(0,0,0,.9); z-index: 9999;
@@ -34,20 +40,43 @@
   .stage {
     width: min(92vw, 1400px); height: min(92vh, 90vw);
     background: center/contain no-repeat;
-    /* Empêche la sélection et le drag */
     user-select:none; -webkit-user-drag: none;
     position:relative;
   }
-  .ui { position: absolute; inset:auto 0 0 0; display:flex;
-        justify-content: space-between; padding: 12px; }
+  .ui { position: absolute; inset:auto 0 0 0; display:flex; gap:8px;
+        justify-content: center; padding: 12px; }
   .btn {
     background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
-    padding:10px 14px; border-radius: 999px; cursor: pointer;
-    backdrop-filter: blur(6px);
+    padding:10px 14px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(6px);
   }
   .btn:active { transform: translateY(1px); }
-  /* Empêche glisser-déposer des images */
-  img { pointer-events:none; -webkit-user-drag: none; }
+
+  /* Tablette : 2 colonnes */
+  @media (min-width: 600px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Desktop : Mosaïque 2×2 PLEIN ÉCRAN (en dessous du header) */
+  @media (min-width: 1024px) {
+    body { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    header { padding: 10px 16px; }
+    .grid {
+      max-width: none; margin: 0;                  /* utilise toute la largeur */
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      height: calc(100vh - 56px);                  /* 56px ≈ hauteur header */
+    }
+    .card {
+      display: grid; grid-template-rows: 1fr auto; /* la vignette remplit la cellule */
+      height: 100%;
+    }
+    .thumb {
+      aspect-ratio: auto;                          /* on laisse la cellule décider */
+      width: 100%; height: 100%;
+      background-size: cover; background-position: center;
+    }
+    .cap { font-size: 15px; }
+  }
 </style>
 </head>
 <body>
@@ -56,26 +85,26 @@
   <main class="grid" id="grid">
     <!-- Remplace les fichiers ci-dessous par les tiens (même dossier) -->
     <figure class="card">
-      <a href="img1.jpg" data-cap="Photo 1">
-        <div class="thumb" style="background-image:url('img1.jpg')"></div>
+      <a href="img1.jpeg" data-cap="Photo 1">
+        <div class="thumb" style="background-image:url('img1.jpeg')"></div>
       </a>
       <figcaption class="cap">Photo 1</figcaption>
     </figure>
     <figure class="card">
-      <a href="img2.jpg" data-cap="Photo 2">
-        <div class="thumb" style="background-image:url('img2.jpg')"></div>
+      <a href="img2.jpeg" data-cap="Photo 2">
+        <div class="thumb" style="background-image:url('img2.jpeg')"></div>
       </a>
       <figcaption class="cap">Photo 2</figcaption>
     </figure>
     <figure class="card">
-      <a href="img3.jpg" data-cap="Photo 3">
-        <div class="thumb" style="background-image:url('img3.jpg')"></div>
+      <a href="img3.jpeg" data-cap="Photo 3">
+        <div class="thumb" style="background-image:url('img3.jpeg')"></div>
       </a>
       <figcaption class="cap">Photo 3</figcaption>
     </figure>
     <figure class="card">
-      <a href="img4.jpg" data-cap="Photo 4">
-        <div class="thumb" style="background-image:url('img4.jpg')"></div>
+      <a href="img4.jpeg" data-cap="Photo 4">
+        <div class="thumb" style="background-image:url('img4.jpeg')"></div>
       </a>
       <figcaption class="cap">Photo 4</figcaption>
     </figure>
@@ -101,25 +130,18 @@
   const prevBtn = document.getElementById('prev');
   let idx = 0;
 
-  // Désactive clic droit global (dissuasion)
+  // Dissuasion : pas de clic droit / drag
   document.addEventListener('contextmenu', e => e.preventDefault());
-  // Désactive glisser-déposer
   document.addEventListener('dragstart', e => e.preventDefault());
 
   function openAt(i){
     idx = (i + links.length) % links.length;
-    const url = links[idx].getAttribute('href');
-    stage.style.backgroundImage = `url('${url}')`;
-    box.classList.add('open');
-    box.setAttribute('aria-hidden', 'false');
+    stage.style.backgroundImage = `url('${links[idx].getAttribute('href')}')`;
+    box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
   }
-  function close(){
-    box.classList.remove('open');
-    box.setAttribute('aria-hidden', 'true');
-  }
-  links.forEach((a,i) => a.addEventListener('click', e => {
-    e.preventDefault(); openAt(i);
-  }));
+  function close(){ box.classList.remove('open'); box.setAttribute('aria-hidden', 'true'); }
+
+  links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
   closeBtn.addEventListener('click', close);
   nextBtn.addEventListener('click', () => openAt(idx+1));
   prevBtn.addEventListener('click', () => openAt(idx-1));
