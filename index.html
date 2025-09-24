@@ -9,13 +9,14 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#111; color:#eee; }
+  body.modal-open { overflow: hidden; } /* bloque le scroll de fond */
 
   header { padding:14px 16px; text-align:center; font-weight:600; }
 
   /* Grille responsive */
   .grid {
     display:grid; gap:var(--gap);
-    grid-template-columns: 1fr;               /* mobile par défaut */
+    grid-template-columns: 1fr;
     padding: var(--gap);
     max-width: 1200px; margin: 0 auto;
   }
@@ -27,7 +28,7 @@
       max-width: none; margin: 0;
       grid-template-columns: repeat(2, 1fr);
       grid-template-rows: repeat(2, 1fr);
-      height: calc(100vh - 56px);             /* plein écran sous le header */
+      height: calc(100vh - 56px);
     }
   }
 
@@ -39,8 +40,8 @@
   }
   .thumb {
     width:100%;
-    aspect-ratio: 3 / 4;                      /* ratio portrait confortable */
-    background: #222 center/contain no-repeat;/* montre l’image entière */
+    aspect-ratio: 3 / 4;
+    background: #222 center/contain no-repeat;
     user-select:none; -webkit-user-drag: none;
   }
   @media (min-width: 1024px){
@@ -48,9 +49,9 @@
   }
   .cap { padding:10px 12px; font-size:14px; opacity:.85; background: rgba(255,255,255,.04); }
 
-  /* Dissuasion téléchargement (inevitable contournable) */
+  /* Dissuasion téléchargement */
   html { -webkit-touch-callout: none; }
-  img { pointer-events:none; -webkit-user-drag: none; }
+  img { -webkit-user-drag: none; }
 
   /* Visionneuse */
   .lightbox {
@@ -62,28 +63,29 @@
     width: min(92vw, 1400px); height: min(92vh, 90vw);
     background: #000;
     position: relative; overflow: hidden;
-    touch-action: none;                        /* pour pointer events/pinch */
+    touch-action: none;
     border-radius: 12px;
   }
   .stage img {
     position: absolute; left: 50%; top: 50%;
-    max-width: none; max-height: none;         /* on gère nous-mêmes */
+    max-width: none; max-height: none;
     transform: translate(-50%, -50%) scale(1);
     transform-origin: center center;
     cursor: grab; user-select: none; will-change: transform;
+    pointer-events: auto;
   }
   .stage img.grabbing { cursor: grabbing; }
 
   .ui {
     position: absolute; inset:auto 0 0 0; display:flex; gap:8px;
-    justify-content: center; padding: 12px;
+    justify-content: center; padding: 12px; flex-wrap: wrap;
   }
   .btn {
     background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
     padding:10px 14px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(6px);
     color:#eee;
   }
-  .btn:active { transform: translateY(1px); }
+  .ui .spacer { flex: 1 1 0; }
 </style>
 </head>
 <body>
@@ -124,6 +126,10 @@
     </div>
     <div class="ui">
       <button class="btn" id="prev" aria-label="Précédent">◀</button>
+      <button class="btn" id="zoomOut" aria-label="Zoom out">－</button>
+      <button class="btn" id="zoomIn" aria-label="Zoom in">＋</button>
+      <button class="btn" id="zoom100" aria-label="100%">100%</button>
+      <button class="btn" id="zoomFit" aria-label="Ajuster">Ajuster</button>
       <button class="btn" id="close" aria-label="Fermer">✕ Fermer</button>
       <button class="btn" id="next" aria-label="Suivant">▶</button>
     </div>
@@ -135,16 +141,21 @@
   const box = document.getElementById('box');
   const stage = document.getElementById('stage');
   const img = document.getElementById('lightImg');
+
   const closeBtn = document.getElementById('close');
-  const nextBtn = document.getElementById('next');
-  const prevBtn = document.getElementById('prev');
+  const nextBtn  = document.getElementById('next');
+  const prevBtn  = document.getElementById('prev');
+  const zoomInBtn  = document.getElementById('zoomIn');
+  const zoomOutBtn = document.getElementById('zoomOut');
+  const zoom100Btn = document.getElementById('zoom100');
+  const zoomFitBtn = document.getElementById('zoomFit');
 
   let idx = 0;
 
   // État zoom/pan
   let scale = 1, minScale = 1, maxScale = 8;
-  let tx = 0, ty = 0;              // translation (px)
-  let startX = 0, startY = 0;      // pour pan souris/doigt
+  let tx = 0, ty = 0;
+  let startX = 0, startY = 0;
   let isPanning = false;
 
   // Pointeurs tactiles (pinch)
@@ -164,36 +175,55 @@
     idx = (i + links.length) % links.length;
     img.src = links[idx].getAttribute('href');
     img.classList.remove('grabbing');
-    // Reset après chargement (pour connaître la taille naturelle)
     img.onload = async () => {
       await loadImageDimensions();
-      resetView();
+      document.body.classList.add('modal-open');  // bloque le scroll de fond
       box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
+      resetView(); centerToFit(); applyTransform();
     };
   }
-  function close(){ box.classList.remove('open'); box.setAttribute('aria-hidden', 'true'); }
-
-  function resetView(){
-    scale = 1; tx = 0; ty = 0;
-    applyTransform();
-    centerToFit();
+  function close(){
+    box.classList.remove('open'); box.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
   }
 
+  function resetView(){ scale = minScale; tx = 0; ty = 0; }
   function applyTransform(){
     img.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${scale})`;
   }
 
   function centerToFit(){
-    // Centrer l’image pour qu’elle tienne dans la stage (minScale = fit)
     const rect = stage.getBoundingClientRect();
     const sw = rect.width, sh = rect.height;
     const fit = Math.min(sw / imgNatural.w, sh / imgNatural.h);
-    minScale = Math.min(1 * fit, fit) || 1; // si très grande, fit<1 ; sinon 1
-    if (!isFinite(minScale) || minScale <= 0) minScale = 1;
-    if (scale < minScale) { scale = minScale; tx = 0; ty = 0; applyTransform(); }
+    minScale = fit > 0 ? fit : 1;
+    scale = Math.max(scale, minScale);
+    tx = 0; ty = 0;
+    applyTransform();
   }
 
-  // Souris : pan + molette zoom
+  function zoomAt(pointX, pointY, factor){
+    const rect = stage.getBoundingClientRect();
+    const cx = pointX - rect.left - rect.width/2 - tx;
+    const cy = pointY - rect.top  - rect.height/2 - ty;
+
+    const newScale = clamp(scale * factor, minScale, maxScale);
+    const k = newScale / scale;
+
+    tx = tx - cx*(k - 1);
+    ty = ty - cy*(k - 1);
+    scale = newScale;
+    applyTransform();
+  }
+
+  // Molette : on capte sur toute la lightbox et on bloque le scroll
+  box.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.2 : 0.8;
+    zoomAt(e.clientX, e.clientY, factor);
+  }, { passive:false });
+
+  // Souris : pan
   img.addEventListener('mousedown', e => {
     isPanning = true; img.classList.add('grabbing');
     startX = e.clientX - tx; startY = e.clientY - ty;
@@ -205,38 +235,22 @@
   });
   document.addEventListener('mouseup', () => { isPanning = false; img.classList.remove('grabbing'); });
 
-  stage.addEventListener('wheel', e => {
+  // Double-clic : 100% si > fit, sinon zoom x2 au centre
+  stage.addEventListener('dblclick', e => {
     e.preventDefault();
-    const rect = stage.getBoundingClientRect();
-    const cx = e.clientX - rect.left - rect.width/2 - tx;
-    const cy = e.clientY - rect.top  - rect.height/2 - ty;
-
-    const factor = e.deltaY < 0 ? 1.2 : 0.8;
-    const newScale = clamp(scale * factor, minScale, maxScale);
-    const k = newScale / scale;
-
-    // Zoom vers le pointeur : ajuster translation
-    tx = tx - cx*(k - 1);
-    ty = ty - cy*(k - 1);
-    scale = newScale;
-    applyTransform();
-  }, { passive:false });
-
-  // Double-clic / double-tap : reset
-  let lastTap = 0;
-  stage.addEventListener('click', e => {
-    const now = Date.now();
-    if (now - lastTap < 300) { resetView(); }
-    lastTap = now;
+    if (Math.abs(scale - minScale) < 1e-3) {
+      zoomAt(e.clientX, e.clientY, 2);
+    } else {
+      scale = minScale; tx = 0; ty = 0; applyTransform();
+    }
   });
 
-  // Pointer events : pan à 1 doigt, pinch à 2 doigts
+  // Pointer events : pan 1 doigt, pinch 2 doigts
   stage.addEventListener('pointerdown', e => {
     stage.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if (pointers.size === 1) { // début pan
-      isPanning = true; startX = e.clientX - tx; startY = e.clientY - ty;
-    } else if (pointers.size === 2) { // début pinch
+    if (pointers.size === 1) { isPanning = true; startX = e.clientX - tx; startY = e.clientY - ty; }
+    else if (pointers.size === 2) {
       const [p1, p2] = [...pointers.values()];
       startDist = dist(p1, p2);
       startScale = scale;
@@ -247,19 +261,16 @@
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if (pointers.size === 1 && isPanning) {
-      tx = e.clientX - startX; ty = e.clientY - startY;
-      applyTransform();
+      tx = e.clientX - startX; ty = e.clientY - startY; applyTransform();
     } else if (pointers.size === 2) {
       const [p1, p2] = [...pointers.values()];
       const rect = stage.getBoundingClientRect();
       const prevMid = startMid;
       const newMid = mid(p1, p2);
 
-      // Zoom factor
       const ratio = dist(p1, p2) / (startDist || 1);
       const newScale = clamp(startScale * ratio, minScale, maxScale);
 
-      // Zoom autour du milieu des 2 doigts
       const cx = prevMid.x - rect.left - rect.width/2 - tx;
       const cy = prevMid.y - rect.top  - rect.height/2 - ty;
       const k = newScale / scale || 1;
@@ -267,7 +278,6 @@
       ty = ty - cy*(k - 1);
       scale = newScale;
 
-      // translater avec déplacement du centre
       tx += (newMid.x - prevMid.x);
       ty += (newMid.y - prevMid.y);
 
@@ -278,16 +288,30 @@
   stage.addEventListener('pointerup', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
   stage.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); if (pointers.size===0) isPanning=false; });
 
-  function clamp(v, a, b){ return Math.min(Math.max(v, a), b); }
-  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
-  function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+  // Boutons
+  zoomInBtn.addEventListener('click', () => zoomAt(stage.getBoundingClientRect().left + stage.clientWidth/2, stage.getBoundingClientRect().top + stage.clientHeight/2, 1.25));
+  zoomOutBtn.addEventListener('click', () => zoomAt(stage.getBoundingClientRect().left + stage.clientWidth/2, stage.getBoundingClientRect().top + stage.clientHeight/2, 0.8));
+  zoom100Btn.addEventListener('click', () => { scale = Math.max(1, minScale); tx = 0; ty = 0; applyTransform(); });
+  zoomFitBtn.addEventListener('click', () => { centerToFit(); });
 
-  // Ouverture/fermeture + nav
+  // Raccourcis clavier : + / - / 0 / f / Échap / ← →
+  document.addEventListener('keydown', e => {
+    if (!box.classList.contains('open')) return;
+    if (e.key === '+') zoomInBtn.click();
+    if (e.key === '-') zoomOutBtn.click();
+    if (e.key === '0') zoom100Btn.click();
+    if (e.key.toLowerCase() === 'f') zoomFitBtn.click();
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') nextBtn.click();
+    if (e.key === 'ArrowLeft') prevBtn.click();
+  });
+
+  // Nav + fermeture
   function closeIfBackdrop(e){ if(e.target === stage || e.target === box) close(); }
   box.addEventListener('click', closeIfBackdrop);
-  closeBtn.addEventListener('click', close);
-  nextBtn.addEventListener('click', () => openAt(idx+1));
-  prevBtn.addEventListener('click', () => openAt(idx-1));
+  document.getElementById('close').addEventListener('click', close);
+  document.getElementById('next').addEventListener('click', () => openAt(idx+1));
+  document.getElementById('prev').addEventListener('click', () => openAt(idx-1));
 
   links.forEach((a,i) => a.addEventListener('click', e => { e.preventDefault(); openAt(i); }));
 
@@ -295,9 +319,12 @@
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('dragstart', e => e.preventDefault());
 
-  // Recalcule minScale si on redimensionne la fenêtre
-  window.addEventListener('resize', () => { centerToFit(); });
+  window.addEventListener('resize', () => { if (box.classList.contains('open')) centerToFit(); });
 
+  // Utils
+  function clamp(v, a, b){ return Math.min(Math.max(v, a), b); }
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+  function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
 })();
 </script>
 </body>
